@@ -1,0 +1,1 @@
+{"serviceName": "frontend","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}]}

@@ -18,10 +18,12 @@ class Application()(implicit
 
   def execute(): IO[ExitCode] = {
     val conf = loadConfig
-    PrometheusAnomalyStream(
-      conf.streamConfig
-    ).runForever()
-      .map(res => res)
+    for {
+      serviceDefinitions <- HardcodedServiceDefinitionLoader.loadAll(conf.serviceDefinitions.path)
+      res <- PrometheusAnomalyStream( serviceDefinitions,
+        conf.streamConfig
+      ).runForever()
+    } yield res
   }
 
   private def loadConfig: Config =

@@ -1,6 +1,6 @@
 package stream
 
-import config.{Config, StreamConfig}
+import config.{Config, StreamConfig, ServiceDefinitions}
 import fs2.kafka.{
   ConsumerSettings,
   AutoOffsetReset,
@@ -10,7 +10,7 @@ import fs2.kafka.{
 import cats.effect.{ContextShift, Async, Timer, ExitCode, IO, Sync}
 import cats.syntax._
 import cats.implicits._
-import domain.AnomalyMessage
+import domain.{AnomalyMessage, KeyedAnomalyMessage}
 import fs2.Stream
 import io.circe
 import org.slf4j.{Logger, LoggerFactory}
@@ -20,7 +20,10 @@ import io.circe.syntax._
 
 import scala.concurrent.duration._
 
-class PrometheusAnomalyStream(streamConfig: StreamConfig)(implicit
+class PrometheusAnomalyStream(
+    serviceDefinitions: Seq[ServiceDefinitions],
+    streamConfig: StreamConfig
+)(implicit
     cs: ContextShift[IO],
     timer: Timer[IO],
     sync: Sync[IO],
@@ -46,16 +49,19 @@ class PrometheusAnomalyStream(streamConfig: StreamConfig)(implicit
       .mapAsync(streamConfig.streamParallelismMax)(processKafkaRecord)
       .filter(_.isDefined)
       .parEvalMap(streamConfig.streamParallelismMax)(messageOption => {
-        val message = messageOption.get
-        log.info(s"Got message: $message")
-        IO(message)
+        val keyedAnomalyMessage = messageOption.get
+        log.info(
+          s"Consumed AnomalyMessage for application ${keyedAnomalyMessage.message.targetAppName} with key ${keyedAnomalyMessage.key}"
+        )
+        IO(keyedAnomalyMessage)
       })
 
   private[stream] def processKafkaRecord(
       committableRecord: CommittableConsumerRecord[IO, String, String]
-  ): IO[Option[AnomalyMessage]] = {
+  ): IO[Option[KeyedAnomalyMessage]] = {
     decode[AnomalyMessage](committableRecord.record.value) match {
-      case Right(value) => IO.pure(Some(value))
+      case Right(value) =>
+        IO.pure(Some(KeyedAnomalyMessage(committableRecord.record.key, value)))
       case Left(_) => {
         log.error(
           s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}"
@@ -69,7 +75,8 @@ class PrometheusAnomalyStream(streamConfig: StreamConfig)(implicit
 
 object PrometheusAnomalyStream {
   def apply(
+      serviceDefinitions: Seq[ServiceDefinitions],
       streamConfig: StreamConfig
   )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
-    new PrometheusAnomalyStream(streamConfig)
+    new PrometheusAnomalyStream(serviceDefinitions, streamConfig)
 }
