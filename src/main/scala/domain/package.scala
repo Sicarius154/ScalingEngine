@@ -13,4 +13,16 @@ package object domain {
 
   implicit val anomalyMessageMetaDataEncoder: Encoder[AnomalyMessageMetaData] =
     deriveEncoder
+
+  implicit val serviceDefinitionDecoder: Decoder[ServiceDefinition] =
+    deriveDecoder
+
+  implicit val serviceDefinitionEncoder: Encoder[ServiceDefinition] =
+    deriveEncoder
+
+  implicit val dependencyDecoder: Decoder[Dependency] =
+    deriveDecoder
+
+  implicit val dependencyEncoder: Encoder[Dependency] =
+    deriveEncoder
 }
