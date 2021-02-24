@@ -18,12 +18,10 @@ class Application()(implicit
 
   def execute(): IO[ExitCode] = {
     val conf = loadConfig
-    for {
-      res <- new PrometheusAnomalyStream(
-        conf.streamConfig
-      ).runForever()
-    } yield res
-
+    PrometheusAnomalyStream(
+      conf.streamConfig
+    ).runForever()
+      .map(res => res)
   }
 
   private def loadConfig: Config =

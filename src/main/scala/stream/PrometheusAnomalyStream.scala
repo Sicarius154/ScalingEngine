@@ -66,3 +66,10 @@ class PrometheusAnomalyStream(streamConfig: StreamConfig)(implicit
 
   }
 }
+
+object PrometheusAnomalyStream {
+  def apply(
+      streamConfig: StreamConfig
+  )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
+    new PrometheusAnomalyStream(streamConfig)
+}
