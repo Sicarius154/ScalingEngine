@@ -1,6 +1,6 @@
 package config
 
-case class Config(streamConfig: StreamConfig, httpConfig: HttpConfig, serviceDefinitions: ServiceDefinitions)
+case class Config(streamConfig: StreamConfig, httpConfig: HttpConfig, serviceDefinitions: ServiceDefinitionConfig)
 
 case class StreamConfig(
     bootstrapServer: String,
@@ -12,4 +12,4 @@ case class StreamConfig(
 
 case class HttpConfig(maxConcurrentRequests: Int)
 
-case class ServiceDefinitions(path: String)
+case class ServiceDefinitionConfig(path: String)

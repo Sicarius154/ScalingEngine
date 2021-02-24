@@ -1,6 +1,6 @@
 package stream
 
-import config.{Config, StreamConfig, ServiceDefinitions}
+import config.{ServiceDefinitionConfig, Config, StreamConfig}
 import fs2.kafka.{
   ConsumerSettings,
   AutoOffsetReset,
@@ -10,7 +10,7 @@ import fs2.kafka.{
 import cats.effect.{ContextShift, Async, Timer, ExitCode, IO, Sync}
 import cats.syntax._
 import cats.implicits._
-import domain.{AnomalyMessage, KeyedAnomalyMessage}
+import domain.{AnomalyMessage, KeyedAnomalyMessage, ServiceDefinition}
 import fs2.Stream
 import io.circe
 import org.slf4j.{Logger, LoggerFactory}
@@ -21,7 +21,7 @@ import io.circe.syntax._
 import scala.concurrent.duration._
 
 class PrometheusAnomalyStream(
-    serviceDefinitions: Seq[ServiceDefinitions],
+    serviceDefinitions: Seq[ServiceDefinition],
     streamConfig: StreamConfig
 )(implicit
     cs: ContextShift[IO],
@@ -75,7 +75,7 @@ class PrometheusAnomalyStream(
 
 object PrometheusAnomalyStream {
   def apply(
-      serviceDefinitions: Seq[ServiceDefinitions],
+      serviceDefinitions: Seq[ServiceDefinition],
       streamConfig: StreamConfig
   )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
     new PrometheusAnomalyStream(serviceDefinitions, streamConfig)
