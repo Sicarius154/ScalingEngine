@@ -5,6 +5,7 @@ import cats.effect.{Timer, IO, ExitCode, ContextShift}
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.ConfigSource
 import pureconfig.generic.auto._
+import servicegraph.ServiceDependencyGraph
 import stream.PrometheusAnomalyStream
 
 import scala.concurrent.ExecutionContext
@@ -19,10 +20,11 @@ class Application()(implicit
   def execute(): IO[ExitCode] = {
     val conf = loadConfig
     for {
-      serviceDefinitions <- HardcodedServiceDefinitionLoader.loadAll(conf.serviceDefinitions.path)
-      res <- PrometheusAnomalyStream( serviceDefinitions,
-        conf.streamConfig
-      ).runForever()
+      serviceDefinitions <-
+        HardcodedServiceDefinitionLoader.loadAll(conf.serviceDefinitions.path)
+      serviceDependencyGraph = ServiceDependencyGraph(serviceDefinitions)
+      res <- PrometheusAnomalyStream(serviceDependencyGraph, conf.streamConfig)
+        .runForever()
     } yield res
   }
 

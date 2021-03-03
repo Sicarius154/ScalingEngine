@@ -1,6 +1,6 @@
 package stream
 
-import config.{ServiceDefinitionConfig, Config, StreamConfig}
+import config.StreamConfig
 import fs2.kafka.{
   ConsumerSettings,
   AutoOffsetReset,
@@ -10,18 +10,24 @@ import fs2.kafka.{
 import cats.effect.{ContextShift, Async, Timer, ExitCode, IO, Sync}
 import cats.syntax._
 import cats.implicits._
-import domain.{AnomalyMessage, KeyedAnomalyMessage, ServiceDefinition}
+import domain.{
+  TargetWithDependencies,
+  AnomalyMessage,
+  KeyedAnomalyMessage,
+  ScalingTarget
+}
 import fs2.Stream
 import io.circe
 import org.slf4j.{Logger, LoggerFactory}
 import io.circe.parser._
 import io.circe.generic.auto._
 import io.circe.syntax._
+import servicegraph.ServiceDependencyGraph
 
 import scala.concurrent.duration._
 
 class PrometheusAnomalyStream(
-    serviceDefinitions: Seq[ServiceDefinition],
+    serviceGraph: ServiceDependencyGraph,
     streamConfig: StreamConfig
 )(implicit
     cs: ContextShift[IO],
@@ -47,21 +53,30 @@ class PrometheusAnomalyStream(
       .evalTap(_.subscribeTo(streamConfig.topic))
       .flatMap(_.stream)
       .mapAsync(streamConfig.streamParallelismMax)(processKafkaRecord)
-      .filter(_.isDefined)
-      .parEvalMap(streamConfig.streamParallelismMax)(messageOption => {
-        val keyedAnomalyMessage = messageOption.get
-        log.info(
-          s"Consumed AnomalyMessage for application ${keyedAnomalyMessage.message.targetAppName} with key ${keyedAnomalyMessage.key}"
+      .mapAsync(streamConfig.streamParallelismMax)(inferDependencies)
+      .mapAsync(streamConfig.streamParallelismMax)(scaleTargets)
+      .map(_ => ())
+
+  private[stream] def scaleTargets(
+      targetOpt: Option[TargetWithDependencies]
+  ): IO[Option[Unit]] =
+    IO {
+      targetOpt
+        .map(target =>
+          log.info(
+            s"Target to scale: ${target.target}. Dependencies: ${target.dependencies}"
+          )
         )
-        IO(keyedAnomalyMessage)
-      })
+    }
 
   private[stream] def processKafkaRecord(
       committableRecord: CommittableConsumerRecord[IO, String, String]
   ): IO[Option[KeyedAnomalyMessage]] = {
     decode[AnomalyMessage](committableRecord.record.value) match {
       case Right(value) =>
-        IO.pure(Some(KeyedAnomalyMessage(committableRecord.record.key, value)))
+        IO.pure(
+          Option(KeyedAnomalyMessage(committableRecord.record.key, value))
+        )
       case Left(_) => {
         log.error(
           s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}"
@@ -69,14 +84,26 @@ class PrometheusAnomalyStream(
         IO.pure(None)
       }
     }
-
   }
+
+  private[stream] def inferDependencies(
+      keyedAnomalyMessageOpt: Option[KeyedAnomalyMessage]
+  ): IO[Option[TargetWithDependencies]] =
+    IO {
+      keyedAnomalyMessageOpt
+        .map { keyedAnomalyMessage =>
+          TargetWithDependencies(
+            keyedAnomalyMessage.message.targetAppName,
+            serviceGraph.inferTargets(keyedAnomalyMessage.message.targetAppName)
+          )
+        }
+    }
 }
 
 object PrometheusAnomalyStream {
   def apply(
-      serviceDefinitions: Seq[ServiceDefinition],
+      serviceGraph: ServiceDependencyGraph,
       streamConfig: StreamConfig
   )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
-    new PrometheusAnomalyStream(serviceDefinitions, streamConfig)
+    new PrometheusAnomalyStream(serviceGraph, streamConfig)
 }
