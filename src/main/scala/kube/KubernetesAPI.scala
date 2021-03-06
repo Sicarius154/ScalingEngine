@@ -8,12 +8,12 @@ import skuber.apps.v1.Deployment
 trait KubernetesAPI {
   def getDeploymentByName(
       name: String,
-      nameSpace: Option[String]
-  ): OptionT[IO, Deployment]
+      namespace: String = "default"
+  ): IO[Deployment]
 
   def getCurrentReplicasByName(
       name: String,
-      nameSpace: Option[String]
+      namespace: String = "default"
   ): OptionT[IO, Int]
 
   def scaleUp(deployment: Deployment): OptionT[IO, Scale]

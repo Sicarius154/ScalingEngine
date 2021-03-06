@@ -5,6 +5,8 @@
         </encoder>
     </appender>
     <logger name="org.http4s.client.PoolManager" level="INFO"/>
+    <logger name="skuber.api" level="OFF"/>
+    <logger name="skuber.api.client.impl.KubernetesClientImpl" level="OFF"/>
 
     <root level="info">
         <appender-ref ref="STDOUT" />

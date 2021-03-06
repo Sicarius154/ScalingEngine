@@ -9,6 +9,11 @@ resolvers ++= Seq(
   "confluent" at "https://packages.confluent.io/maven/",
   Resolver.mavenLocal
 )
+
+fork := true
+
+javaOptions := Seq("-Dskuber.log.request=false;-Dskuber.log.response=false")
+
 lazy val root = (project in file("."))
   .settings(
     organization := "com.chris",
@@ -28,7 +33,8 @@ lazy val root = (project in file("."))
       Dependencies.Fs2.fs2Core,
       Dependencies.Fs2.fs2Kafka,
       Dependencies.TestContainers.testContainersScalaTest,
-      Dependencies.TestContainers.testContainerKafka
+      Dependencies.TestContainers.testContainerKafka,
+      Dependencies.Skuber.skuber
     )
   )
 

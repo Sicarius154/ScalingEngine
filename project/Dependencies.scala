@@ -66,4 +66,9 @@ object Dependencies {
       "com.dimafeng" %% "testcontainers-scala-kafka" % testContainerVersion % "test"
 
   }
+
+  object Skuber {
+    val skuberVersion = "2.6.0"
+    val skuber = "io.skuber" %% "skuber" % skuberVersion
+  }
 }

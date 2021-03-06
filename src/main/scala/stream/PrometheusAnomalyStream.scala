@@ -11,10 +11,10 @@ import cats.effect.{ContextShift, Async, Timer, ExitCode, IO, Sync}
 import cats.syntax._
 import cats.implicits._
 import domain.{
+  ScalingTarget,
   TargetWithDependencies,
   AnomalyMessage,
-  KeyedAnomalyMessage,
-  ScalingTarget
+  KeyedAnomalyMessage
 }
 import fs2.Stream
 import io.circe
@@ -22,13 +22,15 @@ import org.slf4j.{Logger, LoggerFactory}
 import io.circe.parser._
 import io.circe.generic.auto._
 import io.circe.syntax._
+import kube.KubernetesAPI
 import servicegraph.ServiceDependencyGraph
 
 import scala.concurrent.duration._
 
 class PrometheusAnomalyStream(
     serviceGraph: ServiceDependencyGraph,
-    streamConfig: StreamConfig
+    streamConfig: StreamConfig,
+    kubernetesAPI: KubernetesAPI
 )(implicit
     cs: ContextShift[IO],
     timer: Timer[IO],
@@ -40,7 +42,7 @@ class PrometheusAnomalyStream(
 
   val consumerSettings: ConsumerSettings[IO, String, String] =
     ConsumerSettings[IO, String, String]
-      .withAutoOffsetReset(AutoOffsetReset.Earliest)
+      .withAutoOffsetReset(AutoOffsetReset.Latest)
       .withBootstrapServers(streamConfig.bootstrapServer)
       .withGroupId(streamConfig.consumerGroup)
 
@@ -55,18 +57,33 @@ class PrometheusAnomalyStream(
       .mapAsync(streamConfig.streamParallelismMax)(processKafkaRecord)
       .mapAsync(streamConfig.streamParallelismMax)(inferDependencies)
       .mapAsync(streamConfig.streamParallelismMax)(scaleTargets)
-      .map(_ => ())
 
   private[stream] def scaleTargets(
       targetOpt: Option[TargetWithDependencies]
-  ): IO[Option[Unit]] =
-    IO {
-      targetOpt
-        .map(target =>
-          log.info(
-            s"Target to scale: ${target.target}. Dependencies: ${target.dependencies}"
-          )
+  ): IO[Unit] =
+    targetOpt match {
+      case Some(target: TargetWithDependencies) => {
+        for {
+          currentReplicas <-
+            kubernetesAPI.getCurrentReplicasByName(target.target).value
+          _ = currentReplicas match {
+            case Some(value) =>
+              log.info(
+                s"Scaling ${target.target} which currently has ${value} replicas."
+              )
+            case None =>
+              log.error(
+                s"Unable to retrieve number of replicas for ${target.target}"
+              )
+          }
+        } yield ()
+      }
+      case None => {
+        log.error(
+          s"Error scaling target, TargetWithDependencies was None, ensure Kafka messages are valid."
         )
+        IO.unit
+      }
     }
 
   private[stream] def processKafkaRecord(
@@ -103,7 +120,8 @@ class PrometheusAnomalyStream(
 object PrometheusAnomalyStream {
   def apply(
       serviceGraph: ServiceDependencyGraph,
-      streamConfig: StreamConfig
+      streamConfig: StreamConfig,
+      kubernetesAPI: KubernetesAPI
   )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
-    new PrometheusAnomalyStream(serviceGraph, streamConfig)
+    new PrometheusAnomalyStream(serviceGraph, streamConfig, kubernetesAPI)
 }
