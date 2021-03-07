@@ -11,10 +11,10 @@ import cats.effect.{ContextShift, Async, Timer, ExitCode, IO, Sync}
 import cats.syntax._
 import cats.implicits._
 import domain.{
+  ScalingTarget,
   TargetWithDependencies,
   AnomalyMessage,
-  KeyedAnomalyMessage,
-  ScalingTarget
+  KeyedAnomalyMessage
 }
 import fs2.Stream
 import io.circe
@@ -22,13 +22,15 @@ import org.slf4j.{Logger, LoggerFactory}
 import io.circe.parser._
 import io.circe.generic.auto._
 import io.circe.syntax._
+import kube.KubernetesAPI
 import servicegraph.ServiceDependencyGraph
-
+import skuber.apps.v1.Deployment
 import scala.concurrent.duration._
 
 class PrometheusAnomalyStream(
     serviceGraph: ServiceDependencyGraph,
-    streamConfig: StreamConfig
+    streamConfig: StreamConfig,
+    kubernetesAPI: KubernetesAPI
 )(implicit
     cs: ContextShift[IO],
     timer: Timer[IO],
@@ -40,7 +42,7 @@ class PrometheusAnomalyStream(
 
   val consumerSettings: ConsumerSettings[IO, String, String] =
     ConsumerSettings[IO, String, String]
-      .withAutoOffsetReset(AutoOffsetReset.Earliest)
+      .withAutoOffsetReset(AutoOffsetReset.Latest)
       .withBootstrapServers(streamConfig.bootstrapServer)
       .withGroupId(streamConfig.consumerGroup)
 
@@ -54,19 +56,25 @@ class PrometheusAnomalyStream(
       .flatMap(_.stream)
       .mapAsync(streamConfig.streamParallelismMax)(processKafkaRecord)
       .mapAsync(streamConfig.streamParallelismMax)(inferDependencies)
-      .mapAsync(streamConfig.streamParallelismMax)(scaleTargets)
-      .map(_ => ())
+      .mapAsync(streamConfig.streamParallelismMax)(getCurrentDeployment)
+      .mapAsync(streamConfig.streamParallelismMax)(scale)
 
-  private[stream] def scaleTargets(
-      targetOpt: Option[TargetWithDependencies]
-  ): IO[Option[Unit]] =
-    IO {
-      targetOpt
-        .map(target =>
-          log.info(
-            s"Target to scale: ${target.target}. Dependencies: ${target.dependencies}"
-          )
+  private[stream] def scale(deploymentOpt: Option[Deployment]): IO[Unit] =
+    deploymentOpt match {
+      case Some(deployment) =>
+        IO(log.info(s"Scaling ${deployment.name} up")) >> kubernetesAPI.scaleUp(
+          deployment,
+          deployment.spec.get.replicas.get
         )
+      case None => IO.unit
+    }
+
+  private[stream] def getCurrentDeployment(
+      targetOpt: Option[TargetWithDependencies]
+  ): IO[Option[Deployment]] =
+    targetOpt match {
+      case Some(target) => kubernetesAPI.getDeploymentByName(target.target)
+      case None         => IO.pure(None)
     }
 
   private[stream] def processKafkaRecord(
@@ -77,12 +85,13 @@ class PrometheusAnomalyStream(
         IO.pure(
           Option(KeyedAnomalyMessage(committableRecord.record.key, value))
         )
-      case Left(_) => {
-        log.error(
-          s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}"
-        )
-        IO.pure(None)
-      }
+      case Left(_) =>
+        IO {
+          log.error(
+            s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}"
+          )
+          None
+        }
     }
   }
 
@@ -103,7 +112,8 @@ class PrometheusAnomalyStream(
 object PrometheusAnomalyStream {
   def apply(
       serviceGraph: ServiceDependencyGraph,
-      streamConfig: StreamConfig
+      streamConfig: StreamConfig,
+      kubernetesAPI: KubernetesAPI
   )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
-    new PrometheusAnomalyStream(serviceGraph, streamConfig)
+    new PrometheusAnomalyStream(serviceGraph, streamConfig, kubernetesAPI)
 }
