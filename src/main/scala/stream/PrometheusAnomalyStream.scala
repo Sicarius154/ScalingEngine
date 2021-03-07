@@ -61,11 +61,11 @@ class PrometheusAnomalyStream(
 
   private[stream] def scale(deploymentOpt: Option[Deployment]): IO[Unit] =
     deploymentOpt match {
-      case Some(deployment) => {
-        log.info(s"Scaling ${deployment.name} up")
-        kubernetesAPI
-          .scaleUp(deployment, deployment.spec.get.replicas.get)
-      }
+      case Some(deployment) =>
+        IO(log.info(s"Scaling ${deployment.name} up")) >> kubernetesAPI.scaleUp(
+          deployment,
+          deployment.spec.get.replicas.get
+        )
       case None => IO.unit
     }
 
@@ -73,10 +73,8 @@ class PrometheusAnomalyStream(
       targetOpt: Option[TargetWithDependencies]
   ): IO[Option[Deployment]] =
     targetOpt match {
-      case Some(target) => {
-        kubernetesAPI.getDeploymentByName(target.target)
-      }
-      case None => IO.pure(None)
+      case Some(target) => kubernetesAPI.getDeploymentByName(target.target)
+      case None         => IO.pure(None)
     }
 
   private[stream] def processKafkaRecord(
@@ -87,12 +85,13 @@ class PrometheusAnomalyStream(
         IO.pure(
           Option(KeyedAnomalyMessage(committableRecord.record.key, value))
         )
-      case Left(_) => {
-        log.error(
-          s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}"
-        )
-        IO.pure(None)
-      }
+      case Left(_) =>
+        IO {
+          log.error(
+            s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}"
+          )
+          None
+        }
     }
   }
 

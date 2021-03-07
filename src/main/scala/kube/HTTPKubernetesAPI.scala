@@ -8,6 +8,7 @@ import skuber._
 import skuber.json.format._
 import akka.actor.ActorSystem
 import akka.dispatch.Dispatcher
+import cats.implicits.catsSyntaxFlatMapOps
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.ExecutionContextExecutor
@@ -28,15 +29,11 @@ class HTTPKubernetesAPI(implicit
   ): IO[Option[Deployment]] =
     IO.fromFuture(IO(k8s.getInNamespace[Deployment](name, namespace)))
       .redeemWith(
-        { ex =>
-          log.error(
-            s"Error retrieving deployment with name \'$name\'. Error was: ${ex.getMessage}"
-          )
-          IO.pure(None)
-        },
-        { deployment =>
-          IO.pure(Some(deployment))
-        }
+        _ =>
+          IO(
+            log.error(s"Error retrieving deployment with name \'$name\'.")
+          ) >> IO.pure(None),
+        deployment => IO.pure(Some(deployment))
       )
 
   override def getCurrentReplicasByName(
@@ -58,46 +55,42 @@ class HTTPKubernetesAPI(implicit
       deployment: Deployment,
       currentReplicas: Int
   ): IO[Unit] =
-    IO.fromFuture(IO {
-        val newScale =
-          if (currentReplicas < maxReplicas) currentReplicas + 1
-          else currentReplicas
+    IO.fromFuture {
+        IO {
+          val newScale =
+            if (currentReplicas < maxReplicas) currentReplicas + 1
+            else currentReplicas
 
-        val updatedDeployment = deployment.withReplicas(newScale)
+          val updatedDeployment = deployment.withReplicas(newScale)
 
-        k8s.update(updatedDeployment).map(_ => ())
-      })
+          k8s.update(updatedDeployment).map(_ => ())
+        }
+      }
       .redeemWith(
-        { _ =>
-          log.error(
-            s"Error when scaling ${deployment.name} up"
-          )
-          IO.unit
-        },
-        { _ => IO.unit }
+        _ =>
+          IO(log.error(s"Error when scaling ${deployment.name} up")) >> IO.unit,
+        _ => IO.unit
       )
 
   override def scaleDown(
       deployment: Deployment,
       currentReplicas: Int
   ): IO[Unit] =
-    IO.fromFuture(IO {
-        val newScale =
-          if (currentReplicas > 1) currentReplicas - 1
-          else currentReplicas
+    IO.fromFuture {
+        IO {
+          val newScale =
+            if (currentReplicas > 1) currentReplicas - 1
+            else currentReplicas
 
-        val updatedDeployment = deployment.withReplicas(newScale)
+          val updatedDeployment = deployment.withReplicas(newScale)
 
-        k8s.update(updatedDeployment).map(_ => ())
-      })
+          k8s.update(updatedDeployment).map(_ => ())
+        }
+      }
       .redeemWith(
-        { _ =>
-          log.error(
-            s"Error when scaling ${deployment.name} up"
-          )
-          IO.unit
-        },
-        { _ => IO.unit }
+        _ =>
+          IO(log.error(s"Error when scaling ${deployment.name} up")) >> IO.unit,
+        _ => IO.unit
       )
 }
 
