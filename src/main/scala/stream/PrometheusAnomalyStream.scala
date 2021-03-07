@@ -24,7 +24,7 @@ import io.circe.generic.auto._
 import io.circe.syntax._
 import kube.KubernetesAPI
 import servicegraph.ServiceDependencyGraph
-
+import skuber.apps.v1.Deployment
 import scala.concurrent.duration._
 
 class PrometheusAnomalyStream(
@@ -56,34 +56,27 @@ class PrometheusAnomalyStream(
       .flatMap(_.stream)
       .mapAsync(streamConfig.streamParallelismMax)(processKafkaRecord)
       .mapAsync(streamConfig.streamParallelismMax)(inferDependencies)
-      .mapAsync(streamConfig.streamParallelismMax)(scaleTargets)
+      .mapAsync(streamConfig.streamParallelismMax)(getCurrentDeployment)
+      .mapAsync(streamConfig.streamParallelismMax)(scale)
 
-  private[stream] def scaleTargets(
+  private[stream] def scale(deploymentOpt: Option[Deployment]): IO[Unit] =
+    deploymentOpt match {
+      case Some(deployment) => {
+        log.info(s"Scaling ${deployment.name} up")
+        kubernetesAPI
+          .scaleUp(deployment, deployment.spec.get.replicas.get)
+      }
+      case None => IO.unit
+    }
+
+  private[stream] def getCurrentDeployment(
       targetOpt: Option[TargetWithDependencies]
-  ): IO[Unit] =
+  ): IO[Option[Deployment]] =
     targetOpt match {
-      case Some(target: TargetWithDependencies) => {
-        for {
-          currentReplicas <-
-            kubernetesAPI.getCurrentReplicasByName(target.target).value
-          _ = currentReplicas match {
-            case Some(value) =>
-              log.info(
-                s"Scaling ${target.target} which currently has ${value} replicas."
-              )
-            case None =>
-              log.error(
-                s"Unable to retrieve number of replicas for ${target.target}"
-              )
-          }
-        } yield ()
+      case Some(target) => {
+        kubernetesAPI.getDeploymentByName(target.target)
       }
-      case None => {
-        log.error(
-          s"Error scaling target, TargetWithDependencies was None, ensure Kafka messages are valid."
-        )
-        IO.unit
-      }
+      case None => IO.pure(None)
     }
 
   private[stream] def processKafkaRecord(
