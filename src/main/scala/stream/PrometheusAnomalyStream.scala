@@ -123,5 +123,5 @@ object PrometheusAnomalyStream {
     kubernetesAPI: KubernetesAPI,
     serviceMaxReplicaMap: Map[String, Int]
   )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
-    new PrometheusAnomalyStream(serviceGraph, streamConfig, kubernetesAPI)
+    new PrometheusAnomalyStream(serviceGraph, streamConfig, kubernetesAPI, serviceMaxReplicaMap)
 }
