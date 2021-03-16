@@ -51,12 +51,13 @@ class PrometheusAnomalyStream(
   ): IO[Unit] =
     targetAndDeploymentOpt match {
       case Some(targetAndDeployment) =>
-        if (targetAndDeployment.deployment.spec.get.replicas.get < targetAndDeployment.target.maxReplicas) {
+        if (targetAndDeployment.deployment.spec.get.replicas.get < targetAndDeployment.target.maxReplicas)
           IO(log.info(s"Scaling ${targetAndDeployment.target.target} up")) >>
             kubernetesAPI.scaleUp(targetAndDeployment.deployment, targetAndDeployment.deployment.spec.get.replicas.get)
-        } else {
-          IO(log.warn(s"Cannot scale ${targetAndDeployment.target.target} up as maximum replicas has been reached"))
-        }
+        else
+          IO(
+            log.warn(s"Cannot scale ${targetAndDeployment.target.target} up as maximum replicas has been reached")
+          )
       case None => IO.unit
     }
 
@@ -79,7 +80,7 @@ class PrometheusAnomalyStream(
   ): IO[Option[KeyedAnomalyMessage]] = {
     decode[AnomalyMessage](committableRecord.record.value) match {
       case Right(value) =>
-        IO.pure(
+        IO(
           Option(KeyedAnomalyMessage(committableRecord.record.key, value))
         )
       case Left(_) =>

@@ -32,22 +32,8 @@ class HTTPKubernetesAPI(implicit
           IO(
             log.error(s"Error retrieving deployment with name \'$name\'.")
           ) >> IO.pure(None),
-        deployment => IO.pure(Some(deployment))
+        deployment => IO(Option(deployment))
       )
-
-  override def getCurrentReplicasByName(
-    name: String,
-    namespace: String = "default"
-  ): OptionT[IO, Int] =
-    OptionT(
-      getDeploymentByName(name, namespace).map {
-        case Some(deployment) => deployment.status.map(_.replicas)
-        case None => {
-          log.error(s"Error retrieving replicas for deployment ${name}")
-          None
-        }
-      }
-    )
 
   override def scaleUp(
     deployment: Deployment,
