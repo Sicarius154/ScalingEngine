@@ -1,9 +1,9 @@
 package servicegraph
 
-import domain.{ScalingTarget, ServiceDefinition}
+import domain.{ ServiceDefinition, ScalingTargetDefinition}
 
-class ServiceDependencyGraph(relationships: Map[String, Seq[ScalingTarget]]) {
-  def inferTargets(serviceName: String): Option[Seq[ScalingTarget]] =
+class ServiceDependencyGraph(relationships: Map[String, Seq[ScalingTargetDefinition]]) {
+  def inferTargets(serviceName: String): Option[Seq[ScalingTargetDefinition]] =
     relationships.get(serviceName)
 }
 
@@ -11,7 +11,7 @@ object ServiceDependencyGraph {
   def apply(
       serviceDefinitions: Seq[ServiceDefinition]
   ): ServiceDependencyGraph = {
-    val relationships: Map[String, Seq[ScalingTarget]] =
+    val relationships: Map[String, Seq[ScalingTargetDefinition]] =
       mapServicesToDependencies(serviceDefinitions)
 
     new ServiceDependencyGraph(relationships)
@@ -19,10 +19,10 @@ object ServiceDependencyGraph {
 
   def mapServicesToDependencies(
       serviceDefinitions: Seq[ServiceDefinition]
-  ): Map[String, Seq[ScalingTarget]] =
+  ): Map[String, Seq[ScalingTargetDefinition]] =
     serviceDefinitions.map { service =>
       service.serviceName -> service.dependencies.map(dependency =>
-        ScalingTarget(dependency.serviceName, dependency.scaleFactor)
+        ScalingTargetDefinition(dependency.serviceName, dependency.scaleFactor)
       )
     }.toMap
 }
