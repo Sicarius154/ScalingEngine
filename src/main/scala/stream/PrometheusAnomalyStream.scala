@@ -15,6 +15,7 @@ import io.circe.generic.auto._
 import io.circe.syntax._
 import kube.KubernetesAPI
 import servicegraph.ServiceDependencyGraph
+import skuber.apps.v1.Deployment
 
 class PrometheusAnomalyStream(
   serviceGraph: ServiceDependencyGraph,
@@ -50,12 +51,12 @@ class PrometheusAnomalyStream(
   ): IO[Unit] =
     targetAndDeploymentOpt match {
       case Some(targetAndDeployment) =>
-        IO(
-          log.info(s"Scaling ${targetAndDeployment.target.target} up")
-        ) >> kubernetesAPI.scaleUp(
-          targetAndDeployment.deployment,
-          targetAndDeployment.deployment.spec.get.replicas.get
-        )
+        if (targetAndDeployment.target.maxReplicas < targetAndDeployment.deployment.spec.get.replicas.get) {
+          IO(log.info(s"Scaling ${targetAndDeployment.target.target} up")) >>
+            kubernetesAPI.scaleUp(targetAndDeployment.deployment, targetAndDeployment.deployment.spec.get.replicas.get)
+        } else {
+          IO(log.warn(s"Cannot scale ${targetAndDeployment.target.target} up as maximum replicas has been reached"))
+        }
       case None => IO.unit
     }
 
@@ -66,8 +67,8 @@ class PrometheusAnomalyStream(
       case Some(target) => {
         kubernetesAPI
           .getDeploymentByName(target.target)
-          .flatMap { deployment =>
-            IO.pure((target.some, deployment).mapN((target, deployment) => TargetAndDeployment(target, deployment)))
+          .flatMap { deploymentOpt =>
+            IO(deploymentOpt.map(deployment => TargetAndDeployment(target, deployment)))
           }
       }
       case None => IO.pure(None)
@@ -82,10 +83,9 @@ class PrometheusAnomalyStream(
           Option(KeyedAnomalyMessage(committableRecord.record.key, value))
         )
       case Left(_) =>
-        IO {
+        IO(
           log.error(s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}")
-          None
-        }
+        ) >> IO.pure(None)
     }
   }
 
@@ -95,25 +95,31 @@ class PrometheusAnomalyStream(
     IO {
       keyedAnomalyMessageOpt
         .map { keyedAnomalyMessage =>
+          val serviceMaxReplicas = serviceMaxReplicaMap.get(keyedAnomalyMessage.message.targetAppName) match {
+            case Some(maxReplicas) => maxReplicas
+            case None => {
+              log.error(
+                s"Could not retrieve maximum replicas for ${keyedAnomalyMessage.message.targetAppName}. Defaulting to 1"
+              )
+              1
+            }
+          }
+
           Target(
             keyedAnomalyMessage.message.targetAppName,
-            serviceGraph.inferTargets(
-              keyedAnomalyMessage.message.targetAppName
-            ),
-            maxReplicaByService(keyedAnomalyMessage.message.targetAppName)
+            serviceGraph.inferTargets(keyedAnomalyMessage.message.targetAppName),
+            serviceMaxReplicas
           )
         }
     }
 
-  private def maxReplicaByService(service: String): Int =
-    serviceMaxReplicaMap.getOrElse(
-      service, {
-        log.error(
-          s"Could not retrieve maximum replicas for $service. Defaulting to 1"
-        )
+  private[stream] def getReplicasFromDeployment(deployment: Deployment): IO[Int] =
+    IO {
+      deployment.spec.get.replicas.getOrElse {
+        log.error(s"Could not retrieve number of replicas for deployment ${deployment.name}. Defaulting to 1")
         1
       }
-    )
+    }
 }
 
 object PrometheusAnomalyStream {
