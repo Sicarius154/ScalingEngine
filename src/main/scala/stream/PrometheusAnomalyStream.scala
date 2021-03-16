@@ -51,7 +51,7 @@ class PrometheusAnomalyStream(
   ): IO[Unit] =
     targetAndDeploymentOpt match {
       case Some(targetAndDeployment) =>
-        if (targetAndDeployment.target.maxReplicas < targetAndDeployment.deployment.spec.get.replicas.get) {
+        if (targetAndDeployment.deployment.spec.get.replicas.get < targetAndDeployment.target.maxReplicas) {
           IO(log.info(s"Scaling ${targetAndDeployment.target.target} up")) >>
             kubernetesAPI.scaleUp(targetAndDeployment.deployment, targetAndDeployment.deployment.spec.get.replicas.get)
         } else {
