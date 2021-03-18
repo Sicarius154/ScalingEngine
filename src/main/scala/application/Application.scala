@@ -35,11 +35,13 @@ class Application()(implicit
           HardcodedServiceDefinitionLoader.loadAll(conf.serviceDefinitions.path)
         serviceDependencyGraph = ServiceDependencyGraph(serviceDefinitions)
         generatedServiceMaxReplicaMap = serviceMaxReplicaMap(serviceDefinitions)
+        generatedServiceMinReplicaMap = serviceMinReplicaMap(serviceDefinitions)
         res <- PrometheusAnomalyStream(
           serviceDependencyGraph,
           conf.streamConfig,
           kubernetesAPI,
-          generatedServiceMaxReplicaMap
+          generatedServiceMaxReplicaMap,
+          generatedServiceMinReplicaMap
         ).runForever()
       } yield res
     }
@@ -47,6 +49,11 @@ class Application()(implicit
   private def serviceMaxReplicaMap(definitions: Seq[ServiceDefinition]): Map[String, Int] =
     definitions.map { service =>
       service.serviceName -> service.maxReplicas
+    }.toMap
+
+  private def serviceMinReplicaMap(definitions: Seq[ServiceDefinition]): Map[String, Int] =
+    definitions.map { service =>
+      service.serviceName -> service.minReplicas
     }.toMap
 
   private def withKubernetesAPI(

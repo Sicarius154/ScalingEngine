@@ -1,1 +1,1 @@
-{"serviceName": "frontend","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  5}
+{"serviceName": "frontend","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  5, "minReplicas": 1}

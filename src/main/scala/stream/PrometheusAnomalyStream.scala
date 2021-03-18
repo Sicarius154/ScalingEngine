@@ -21,7 +21,8 @@ class PrometheusAnomalyStream(
   serviceGraph: ServiceDependencyGraph,
   streamConfig: StreamConfig,
   kubernetesAPI: KubernetesAPI,
-  serviceMaxReplicaMap: Map[String, Int]
+  serviceMaxReplicaMap: Map[String, Int],
+  serviceMinReplicaMap: Map[String, Int]
 )(implicit cs: ContextShift[IO], timer: Timer[IO], sync: Sync[IO], async: Async[IO])
     extends AnomalyStream {
   private val log: Logger =
@@ -92,27 +93,35 @@ class PrometheusAnomalyStream(
 
   private[stream] def inferDependencies(
     keyedAnomalyMessageOpt: Option[KeyedAnomalyMessage]
-  ): IO[Option[Target]] =
-    IO {
-      keyedAnomalyMessageOpt
-        .map { keyedAnomalyMessage =>
-          val serviceMaxReplicas = serviceMaxReplicaMap.get(keyedAnomalyMessage.message.targetAppName) match {
-            case Some(maxReplicas) => maxReplicas
-            case None => {
-              log.error(
-                s"Could not retrieve maximum replicas for ${keyedAnomalyMessage.message.targetAppName}. Defaulting to 1"
-              )
-              1
-            }
-          }
-
-          Target(
-            keyedAnomalyMessage.message.targetAppName,
-            serviceGraph.inferTargets(keyedAnomalyMessage.message.targetAppName),
-            serviceMaxReplicas
+  ): IO[Option[Target]] = IO {
+    keyedAnomalyMessageOpt.map { keyedAnomalyMessage =>
+      val maxReplicas = serviceMaxReplicaMap.get(keyedAnomalyMessage.message.targetAppName) match {
+        case Some(value) => value
+        case None =>
+          log.error(
+            s"Could not retrieve maximum replicas for ${keyedAnomalyMessage.message.targetAppName}. Defaulting to 1"
           )
-        }
+          1
+      }
+
+      val minReplicas = serviceMinReplicaMap.get(keyedAnomalyMessage.message.targetAppName) match {
+        case Some(value) => value
+        case None =>
+          log.error(
+            s"Could not retrieve minimum replicas for ${keyedAnomalyMessage.message.targetAppName}. Defaulting to 1"
+          )
+          1
+      }
+
+
+      Target(
+        keyedAnomalyMessage.message.targetAppName,
+        serviceGraph.inferTargets(keyedAnomalyMessage.message.targetAppName),
+        maxReplicas,
+        minReplicas
+      )
     }
+  }
 
   private[stream] def getReplicasFromDeployment(deployment: Deployment): IO[Int] =
     IO {
@@ -128,7 +137,8 @@ object PrometheusAnomalyStream {
     serviceGraph: ServiceDependencyGraph,
     streamConfig: StreamConfig,
     kubernetesAPI: KubernetesAPI,
-    serviceMaxReplicaMap: Map[String, Int]
+    serviceMaxReplicaMap: Map[String, Int],
+    serviceMinReplicaMap: Map[String, Int]
   )(implicit cs: ContextShift[IO], timer: Timer[IO]): PrometheusAnomalyStream =
-    new PrometheusAnomalyStream(serviceGraph, streamConfig, kubernetesAPI, serviceMaxReplicaMap)
+    new PrometheusAnomalyStream(serviceGraph, streamConfig, kubernetesAPI, serviceMaxReplicaMap, serviceMinReplicaMap)
 }
