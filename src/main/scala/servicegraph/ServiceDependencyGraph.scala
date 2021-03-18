@@ -1,28 +1,54 @@
 package servicegraph
 
-import domain.{ ServiceDefinition, ScalingTargetDefinition}
+import domain.{ServiceDefinition, TargetDependency}
+import org.slf4j.{Logger, LoggerFactory}
 
-class ServiceDependencyGraph(relationships: Map[String, Seq[ScalingTargetDefinition]]) {
-  def inferTargets(serviceName: String): Option[Seq[ScalingTargetDefinition]] =
-    relationships.get(serviceName)
+class ServiceDependencyGraph(
+  relationships: Map[String, Seq[TargetDependency]]
+) {
+  def inferTargets(serviceName: String): Seq[TargetDependency] =
+    relationships.getOrElse(serviceName, Seq.empty[TargetDependency])
 }
 
 object ServiceDependencyGraph {
+  private val log: Logger = LoggerFactory.getLogger(getClass.getSimpleName)
   def apply(
-      serviceDefinitions: Seq[ServiceDefinition]
+    serviceDefinitions: Seq[ServiceDefinition],
+    serviceMaxReplicaMap: Map[String, Int],
+    serviceMinReplicaMap: Map[String, Int]
   ): ServiceDependencyGraph = {
-    val relationships: Map[String, Seq[ScalingTargetDefinition]] =
-      mapServicesToDependencies(serviceDefinitions)
+    val relationships: Map[String, Seq[TargetDependency]] =
+      mapServicesToDependencies(serviceDefinitions, serviceMaxReplicaMap, serviceMinReplicaMap)
 
     new ServiceDependencyGraph(relationships)
   }
 
   def mapServicesToDependencies(
-      serviceDefinitions: Seq[ServiceDefinition]
-  ): Map[String, Seq[ScalingTargetDefinition]] =
+    serviceDefinitions: Seq[ServiceDefinition],
+    serviceMaxReplicaMap: Map[String, Int],
+    serviceMinReplicaMap: Map[String, Int]
+  ): Map[String, Seq[TargetDependency]] =
     serviceDefinitions.map { service =>
-      service.serviceName -> service.dependencies.map(dependency =>
-        ScalingTargetDefinition(dependency.serviceName, dependency.scaleFactor)
-      )
+      service.serviceName -> service.dependencies.map { dependency =>
+        val maxReplicas = serviceMaxReplicaMap.get(dependency.serviceName) match {
+          case Some(value) => value
+          case None =>
+            log.error(
+              s"Could not retrieve maximum replicas for ${dependency.serviceName}. Defaulting to 1"
+            )
+            1
+        }
+
+        val minReplicas = serviceMinReplicaMap.get(dependency.serviceName) match {
+          case Some(value) => value
+          case None =>
+            log.error(
+              s"Could not retrieve minimum replicas for ${dependency.serviceName}. Defaulting to 1"
+            )
+            1
+        }
+
+        TargetDependency(dependency.serviceName, maxReplicas, minReplicas)
+      }
     }.toMap
 }
