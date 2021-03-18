@@ -5,6 +5,7 @@
         </encoder>
     </appender>
     <logger name="org.http4s.client.PoolManager" level="INFO"/>
+    <logger name="org.apache.kafka.clients" level="OFF"/>
     <logger name="skuber.api" level="OFF"/>
     <logger name="skuber.api.client.impl.KubernetesClientImpl" level="OFF"/>
 

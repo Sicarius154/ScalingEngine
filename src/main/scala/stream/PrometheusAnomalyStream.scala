@@ -52,13 +52,38 @@ class PrometheusAnomalyStream(
   ): IO[Unit] =
     targetAndDeploymentOpt match {
       case Some(targetAndDeployment) =>
-        if (targetAndDeployment.deployment.spec.get.replicas.get < targetAndDeployment.target.maxReplicas)
-          IO(log.info(s"Scaling ${targetAndDeployment.target.target} up")) >>
-            kubernetesAPI.scaleUp(targetAndDeployment.deployment, targetAndDeployment.deployment.spec.get.replicas.get)
-        else
-          IO(
-            log.warn(s"Cannot scale ${targetAndDeployment.target.target} up as maximum replicas has been reached")
-          )
+
+        //TODO: Check for invalid scale function here
+        val currentDeploymentReplicas = targetAndDeployment.deployment.spec.get.replicas.get
+        val scaleIO =
+          if (targetAndDeployment.target.function.equals("out")) {
+            if (currentDeploymentReplicas < targetAndDeployment.target.maxReplicas)
+              kubernetesAPI.scaleUp(
+                targetAndDeployment.deployment,
+                currentDeploymentReplicas
+              )
+            else
+              IO(
+                log.warn(
+                  s"Cannot scale ${targetAndDeployment.target.target} ${targetAndDeployment.target.function} as maximum replicas have been reached"
+                )
+              )
+          } else {
+            if (targetAndDeployment.target.minReplicas < currentDeploymentReplicas)
+              kubernetesAPI.scaleDown(
+                targetAndDeployment.deployment,
+                currentDeploymentReplicas
+              )
+            else
+              IO(
+                log.warn(
+                  s"Cannot scale ${targetAndDeployment.target.target} ${targetAndDeployment.target.function} as minimum replicas have been reached"
+                )
+              )
+          }
+          
+        IO(log.info(s"Scaling ${targetAndDeployment.target.target} ${targetAndDeployment.target.function}")) >>
+          scaleIO
       case None => IO.unit
     }
 
@@ -112,7 +137,6 @@ class PrometheusAnomalyStream(
           )
           1
       }
-
 
       Target(
         keyedAnomalyMessage.message.targetAppName,
