@@ -1,1 +1,4 @@
-{"serviceName": "frontend","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  5}
+{"serviceName": "frontend","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "checkoutservice","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  2, "minReplicas": 1}
+{"serviceName": "adservice","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  3, "minReplicas": 1}
+{"serviceName": "productcatalogservice","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  2, "minReplicas": 1}
