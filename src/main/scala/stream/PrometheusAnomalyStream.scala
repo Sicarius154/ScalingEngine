@@ -118,7 +118,8 @@ class PrometheusAnomalyStream(
         keyedAnomalyMessage.message.targetAppName,
         serviceGraph.inferTargets(keyedAnomalyMessage.message.targetAppName),
         maxReplicas,
-        minReplicas
+        minReplicas,
+        keyedAnomalyMessage.message.function //TODO: Add validation here, should be OK from topic but best to check
       )
     }
   }
