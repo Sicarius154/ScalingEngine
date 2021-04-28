@@ -6,12 +6,18 @@ import org.slf4j.{Logger, LoggerFactory}
 class ServiceDependencyGraph(
   relationships: Map[String, Seq[TargetDependency]]
 ) {
+  /**
+   * Returns a list of Services that a given service depends on
+   * @param serviceName name of the service
+   * @return
+   */
   def inferTargets(serviceName: String): Seq[TargetDependency] =
     relationships.getOrElse(serviceName, Seq.empty[TargetDependency])
 }
 
 object ServiceDependencyGraph {
   private val log: Logger = LoggerFactory.getLogger(getClass.getSimpleName)
+
   def apply(
     serviceDefinitions: Seq[ServiceDefinition],
     serviceMaxReplicaMap: Map[String, Int],
@@ -23,6 +29,13 @@ object ServiceDependencyGraph {
     new ServiceDependencyGraph(relationships)
   }
 
+  /**
+   * Creates a Map from each service to another Sequence of services that the keyed service depends on
+   * @param serviceDefinitions
+   * @param serviceMaxReplicaMap
+   * @param serviceMinReplicaMap
+   * @return
+   */
   def mapServicesToDependencies(
     serviceDefinitions: Seq[ServiceDefinition],
     serviceMaxReplicaMap: Map[String, Int],

@@ -14,6 +14,7 @@ import org.slf4j.{Logger, LoggerFactory}
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.{Failure, Success}
 
+
 class HTTPKubernetesAPI(implicit
   cs: ContextShift[IO],
   k8s: K8SRequestContext,
@@ -22,6 +23,12 @@ class HTTPKubernetesAPI(implicit
 ) extends KubernetesAPI {
   private val log: Logger = LoggerFactory.getLogger(getClass.getSimpleName)
 
+  /**
+   * Retrieves a Kubernetes deployment using Skuber. Wrapped in IO to capture side effects
+   * @param name name of the deployment
+   * @param namespace namespace of the deployment
+   * @return
+   */
   override def getDeploymentByName(
     name: String,
     namespace: String = "default"
@@ -35,6 +42,12 @@ class HTTPKubernetesAPI(implicit
         deployment => IO(Option(deployment))
       )
 
+  /**
+   * Increases the number of replicas for a given deployment using Skuber
+   * @param deployment Deployment object
+   * @param currentReplicas The current number of replicas
+   * @return
+   */
   override def scaleUp(
     deployment: Deployment,
     currentReplicas: Int
@@ -42,9 +55,15 @@ class HTTPKubernetesAPI(implicit
     IO.fromFuture(IO(k8s.update(deployment.withReplicas(currentReplicas + 1)).map(_ => ())))
       .redeemWith(
         _ => IO(log.error(s"Error when scaling ${deployment.name} up")) >> IO.unit,
-        _ => IO.unit
+        _ => IO.unit //Return Unit as we do not care about a result that is not an error
       )
 
+  /**
+   * Decreases the number of replicas for a given deployment using Skuber
+   * @param deployment Deployment object
+   * @param currentReplicas The current number of replicas
+   * @return
+   */
   override def scaleDown(
     deployment: Deployment,
     currentReplicas: Int
@@ -52,7 +71,7 @@ class HTTPKubernetesAPI(implicit
     IO.fromFuture(IO(k8s.update(deployment.withReplicas(currentReplicas - 1)).map(_ => ())))
       .redeemWith(
         _ => IO(log.error(s"Error when scaling ${deployment.name} down")) >> IO.unit,
-        _ => IO.unit
+        _ => IO.unit //Return Unit as we do not care about a result that is not an error
       )
 }
 
@@ -64,6 +83,14 @@ object HTTPKubernetesAPI {
     dispatcher: ExecutionContextExecutor
   ): HTTPKubernetesAPI = new HTTPKubernetesAPI()
 
+  /**
+   * Creates and returns a HTTPKubernetesAPI in the form of a Resource
+   * @param cs
+   * @param k8s
+   * @param system
+   * @param dispatcher
+   * @return
+   */
   def asResource()(implicit
     cs: ContextShift[IO],
     k8s: K8SRequestContext,

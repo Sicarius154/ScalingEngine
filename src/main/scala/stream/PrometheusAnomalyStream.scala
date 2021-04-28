@@ -34,9 +34,17 @@ class PrometheusAnomalyStream(
       .withBootstrapServers(streamConfig.bootstrapServer)
       .withGroupId(streamConfig.consumerGroup)
 
+  /**
+   * Runs the stream
+   * @return
+   */
   override def runForever(): IO[ExitCode] =
     anomalyStream().compile.drain.as(ExitCode.Success)
 
+  /**
+   * Definition of the stream with parallelism and so forth enabled
+   * @return
+   */
   private[stream] def anomalyStream(): Stream[IO, Unit] =
     KafkaConsumer
       .stream(consumerSettings)
@@ -51,6 +59,12 @@ class PrometheusAnomalyStream(
       .unNone
       .mapAsync(streamConfig.streamParallelismMax)(scaleServiceAndDependencies)
 
+  /**
+   * Uses an Anomaly to obtain the different services that will need to be scaled in/out
+   * Includes dependent services
+   * @param anomaly
+   * @return
+   */
   private[stream] def createScalingCandidates(anomaly: Anomaly): IO[Seq[ScalingCandidate]] = IO {
     val scalingFunction = anomaly.function
     val anomalyScalingCandidateSingleton = Seq(
@@ -62,14 +76,20 @@ class PrometheusAnomalyStream(
     }
     if(dependencyScalingCandidates.nonEmpty)
       log.info(s"Will scale [${dependencyScalingCandidates.map(_.serviceName).mkString(",")}] ${scalingFunction} as they are dependencies of ${anomaly.target}")
-    anomalyScalingCandidateSingleton |+| dependencyScalingCandidates
+    anomalyScalingCandidateSingleton |+| dependencyScalingCandidates //Join the original anomaly-induced service and dependencies
   }
 
+  /**
+   * Scale both the original anomaly-induced service and services that it depends on
+   * @param targetAndDeployment
+   * @return
+   */
   private[stream] def scaleServiceAndDependencies(
     targetAndDeployment: TargetAndDeployment
   ): IO[Unit] = {
     //TODO: Check for invalid scale function here
-    val currentDeploymentReplicas = targetAndDeployment.deployment.spec.get.replicas.get
+    val currentDeploymentReplicas = targetAndDeployment.deployment.spec.get.replicas.get //Obtain nReplicas from Skuber
+
     val scaleIO =
       if (targetAndDeployment.target.function.equals("out")) {
         if (currentDeploymentReplicas < targetAndDeployment.target.maxReplicas)
@@ -85,7 +105,7 @@ class PrometheusAnomalyStream(
               s"Cannot scale ${targetAndDeployment.target.serviceName} ${targetAndDeployment.target.function} as maximum replicas have been reached"
             )
           )
-      } else {
+      } else { //Path of execution for scaling in
         if (targetAndDeployment.target.minReplicas < currentDeploymentReplicas)
           IO(
             log.info(s"Scaling ${targetAndDeployment.target.serviceName} ${targetAndDeployment.target.function}")
@@ -101,9 +121,15 @@ class PrometheusAnomalyStream(
           )
       }
 
+    //Return the function encapsulated in IO
     scaleIO
   }
 
+  /**
+   * Retrieve a deployment from Kubernetes using Skuber
+   * @param target
+   * @return
+   */
   private[stream] def getCurrentDeployment(
     target: ScalingCandidate
   ): IO[Option[TargetAndDeployment]] =
@@ -111,11 +137,16 @@ class PrometheusAnomalyStream(
       .getDeploymentByName(target.serviceName)
       .flatMap { deploymentOpt =>
         IO(deploymentOpt.map(deployment => TargetAndDeployment(target, deployment)))
-      }
+      }// Execute an IO and retrieve an Option of deployment, then create a case class to represent the value
 
+  /**
+   * Takes a Kafka Record, validates it then returns the required content from it. Decodes from JSON
+   * @param committableRecord
+   * @return
+   */
   private[stream] def processKafkaRecord(
     committableRecord: CommittableConsumerRecord[IO, String, String]
-  ): IO[Option[KeyedAnomalyMessage]] = {
+  ): IO[Option[KeyedAnomalyMessage]] =
     decode[AnomalyMessage](committableRecord.record.value) match {
       case Right(value) =>
         IO(
@@ -126,9 +157,9 @@ class PrometheusAnomalyStream(
           log.error(s"Error decoding record with key ${committableRecord.record.key} from topic ${streamConfig.topic}")
         ) >> IO.pure(None)
     }
-  }
 
   private[stream] def getMinAndMaxReplicas(serviceName: String): (Int, Int) = {
+    //Gracefully extract the number of replicas from an Option
     val maxReplicas = serviceMaxReplicaMap.get(serviceName) match {
       case Some(value) => value
       case None =>
@@ -137,7 +168,7 @@ class PrometheusAnomalyStream(
         )
         1
     }
-
+    //Gracefully extract the number of replicas from an Option
     val minReplicas = serviceMinReplicaMap.get(serviceName) match {
       case Some(value) => value
       case None =>
@@ -147,9 +178,14 @@ class PrometheusAnomalyStream(
         1
     }
 
-    (minReplicas, maxReplicas)
+    (minReplicas, maxReplicas) //Return a tuple of min and max replicas for the given service
   }
 
+  /**
+   * Takes a Kafka message and converts it to a case class that contains the data needed for scaling
+   * @param keyedAnomalyMessage
+   * @return
+   */
   private[stream] def createAnomaly(
     keyedAnomalyMessage: KeyedAnomalyMessage
   ): IO[Anomaly] = IO {

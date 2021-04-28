@@ -23,10 +23,17 @@ class Application()(implicit
 ) {
   private val log: Logger = LoggerFactory.getLogger(getClass.getSimpleName)
 
+  //Implict values for Akka and Skuber
   implicit private val system: ActorSystem = ActorSystem()
   implicit private val dispatcher: ExecutionContextExecutor = system.dispatcher
   implicit private val k8s: KubernetesClient = k8sInit
 
+
+  /**
+   * Starts the application
+   *
+   * @return
+   */
   def execute(): IO[ExitCode] =
     withKubernetesAPI() { kubernetesAPI =>
       val conf = loadConfig
@@ -50,16 +57,31 @@ class Application()(implicit
       } yield res
     }
 
+  /**
+   * Maps each service to the maximum number of replicas
+   * @param definitions
+   * @return
+   */
   private def serviceMaxReplicaMap(definitions: Seq[ServiceDefinition]): Map[String, Int] =
     definitions.map { service =>
       service.serviceName -> service.maxReplicas
     }.toMap
 
+  /**
+   * Maps each service to the minimum number of replicas
+   * @param definitions
+   * @return
+   */
   private def serviceMinReplicaMap(definitions: Seq[ServiceDefinition]): Map[String, Int] =
     definitions.map { service =>
       service.serviceName -> service.minReplicas
     }.toMap
 
+  /**
+   * Executes a given function in the context of a kubernetesAPI using HOF's
+   * @param f
+   * @return
+   */
   private def withKubernetesAPI(
   )(f: HTTPKubernetesAPI => IO[ExitCode]): IO[ExitCode] =
     HTTPKubernetesAPI

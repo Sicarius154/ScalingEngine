@@ -9,6 +9,11 @@ import scala.io.Source
 object HardcodedServiceDefinitionLoader extends ServiceDefinitionLoader {
   private val log: Logger = LoggerFactory.getLogger(getClass.getSimpleName)
 
+  /**
+   * Loads all service definitions
+   * @param source resource source file
+   * @return
+   */
   override def loadAll(source: String): IO[Seq[ServiceDefinition]] =
     IO {
       Source
