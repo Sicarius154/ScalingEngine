@@ -1,4 +1,10 @@
-{"serviceName": "frontend","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  5, "minReplicas": 1}
-{"serviceName": "checkoutservice","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  2, "minReplicas": 1}
-{"serviceName": "adservice","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  3, "minReplicas": 1}
-{"serviceName": "productcatalogservice","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkout","scaleFactor": 2}], "maxReplicas":  2, "minReplicas": 1}
+{"serviceName": "frontend","dependencies": [{"serviceName": "adservice","scaleFactor": 1},{"serviceName": "checkoutservice","scaleFactor": 2},{"serviceName":  "recommendationservice", "scaleFactor": 1},{"serviceName":  "checkoutservice", "scaleFactor": 1},{"serviceName":  "productcatalogservice", "scaleFactor": 1},{"serviceName":  "currencyservice", "scaleFactor": 1},{"serviceName":  "cartservice", "scaleFactor": 1},{"serviceName":  "shippingservice", "scaleFactor": 1}], "maxReplicas":  10, "minReplicas": 1}
+{"serviceName": "checkoutservice","dependencies": [], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "cartservice","dependencies": [], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "adservice","dependencies": [], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "productcatalogservice","dependencies": [], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "recommendationservice","dependencies": [], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "shippingservice","dependencies": [], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "currencyservice","dependencies": [], "maxReplicas":  5, "minReplicas": 1}
+{"serviceName": "paymentservice","dependencies": [], "maxReplicas":  3, "minReplicas": 1}
+{"serviceName": "emailservice","dependencies": [], "maxReplicas":  3, "minReplicas": 1}

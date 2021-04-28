@@ -33,9 +33,13 @@ class Application()(implicit
       for {
         serviceDefinitions <-
           HardcodedServiceDefinitionLoader.loadAll(conf.serviceDefinitions.path)
-        serviceDependencyGraph = ServiceDependencyGraph(serviceDefinitions)
         generatedServiceMaxReplicaMap = serviceMaxReplicaMap(serviceDefinitions)
         generatedServiceMinReplicaMap = serviceMinReplicaMap(serviceDefinitions)
+        serviceDependencyGraph = ServiceDependencyGraph(
+          serviceDefinitions,
+          generatedServiceMaxReplicaMap,
+          generatedServiceMinReplicaMap
+        )
         res <- PrometheusAnomalyStream(
           serviceDependencyGraph,
           conf.streamConfig,
